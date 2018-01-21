@@ -1,4 +1,11 @@
-import scipy as sp
+"""
+module containing functions for calculating the choice probability of recorded neurons
+1/19/2018
+Eric Finkel
+"""
+import time
+
+ scipy as sp
 import scipy.io
 import scipy.stats
 import os
@@ -15,14 +22,12 @@ import multiprocessing as mp
 from tqdm import tnrange
 from itertools import repeat
 from functools import partial
-"""
-to do:
--create function to calculate choice prob 
--using multiprocessing package create function that iterates over all units and saves hdf5 file
-"""
+
 def load_data():
 	"""
-	function that loads, cleans, and performs some initial processing on matlab table that contains data from entire dataset
+	function that loads, cleans, and performs some initial processing on log_df table that contains data from entire dataset.
+	log_df table was generated from Intan recording data that was originally preprocessed in matlab using
+	cat_session.mat function
 	"""
 	log_df = pd.read_hdf('C:/Users/PC/Documents/GitHub/Jupyter-data-analysis/Data/log_df.h5', 'table')
 	log_df['stim_onset'] = log_df['stim_onset'].fillna(0)
@@ -175,6 +180,8 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
 	
 	
 if __name__ == '__main__':
+
+		start_time = time.time()
 		log_df, unit_key_df = load_data()
 		trial_type = 'Stim_Som_NoCue'
 		comparison = 'Lick_no_lick'
@@ -184,10 +191,10 @@ if __name__ == '__main__':
 			
 		aucs_CI = np.squeeze(np.array(aucs_CI))
 
-
 		auc_scores = aucs_CI[:,0]
 		conf_upper = aucs_CI[:,1]
 		conf_lower = aucs_CI[:,2]
 		df = package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower)
 		df.to_hdf('test_auc.h5', 'table')
 		print(df)
+		print("--- %s seconds ---" % (time.time() - start_time))
