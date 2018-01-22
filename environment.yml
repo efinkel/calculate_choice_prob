@@ -1,0 +1,9 @@
+name: choice-prob-env
+dependencies:
+- python 3
+- scipy
+- numpy
+- pandas
+- scikit-learn
+- tqdm
+- parmap
