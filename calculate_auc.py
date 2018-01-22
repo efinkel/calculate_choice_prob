@@ -33,6 +33,7 @@ def load_data():
 	log_df table was generated from Intan recording data that was originally preprocessed in matlab using
 	cat_session.mat function
 	"""
+	
 	log_df = pd.read_hdf('C:/Users/PC/Documents/GitHub/Jupyter-data-analysis/Data/log_df.h5', 'table')
 	log_df['stim_onset'] = log_df['stim_onset'].fillna(0)
 	log_df['spike_times(stim_aligned)'] = log_df['spike_times'] - log_df['stim_onset']
@@ -79,6 +80,11 @@ def load_data():
 	unit_key_df = log_df[['uni_id', 'mouse_name', 'date', 'cluster_name']].drop_duplicates().reset_index(drop = True)
 	return log_df, unit_key_df
 def filt_motion_trials(log_df, exclude_fn):
+	"""
+	takes exclude_fn df and uses contents to filter out rows with high motion artifact
+	in main log_df file
+	"""
+	
 	mat = sp.io.loadmat(exclude_fn)
 	log = mat['trialsToExclude']
 	indv_log_df = pd.DataFrame(log, columns = ['mouse_name', 'date', 'trial_num'])
@@ -95,6 +101,10 @@ def filt_motion_trials(log_df, exclude_fn):
 	return log_df
 
 def unit_row_list(log_df):
+	"""cuts up main log_df file into a list of dfs that each correspond to one
+	   unit. This should increase performance of trial_auc function ~10s/unit
+	"""
+	
 	log_byID = log_df.groupby('uni_id')
 	unique_ids = log_byID.groups.keys()
 	log_unit_list = [log_byID.get_group(key) for key in unique_ids]
@@ -107,10 +117,7 @@ def trial_auc(unit_rows, trial_type,  comparison = 'Lick_no_lick'):
 	"""
 	
 	edges = np.arange(-1,3, 0.025)
-	#unit_rows = log_df[log_df['uni_id'] == uni_id]
-	#unit_rows = pd.merge(log_df,pd.DataFrame(unit_key_df.loc[unit_num]).T, how = 'inner', on=['uni_id'])
 	
-
 	if comparison == 'Lick_no_lick':
 		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0),:].copy()
 		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0),:].copy()
@@ -196,27 +203,29 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
     auc_df = pd.concat([unit_key_df, auc_scores_df, conf_up_df, conf_low_df], axis = 1)
     return auc_df
 	
+def main(trial_type = 'Stim_Som_NoCue', comparison = 'Lick_no_lick'):
+	print('trialtype: Stim_Som_NoCue, comparison: Lick_no_lick')
+
+	log_df, unit_key_df = load_data()
+	unique_ids = unit_key_df['uni_id'].as_matrix()
+	unit_list = unit_row_list(log_df)
+	log_df = filt_motion_trials(log_df, 'trialsToExclude')
+	start_time = time.time()
+	
+	with mp.Pool(7) as pool:
+		aucs_CI = pool.starmap(trial_auc, zip(unit_list, repeat(trial_type)))
+	#auc_CI = parmap.starmap(trial_auc, unit_list[0:5], trial_type)
+	#auc_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:5]))]
+	aucs_CI = np.squeeze(np.array(aucs_CI))
+
+	auc_scores = aucs_CI[:,0]
+	conf_upper = aucs_CI[:,1]
+	conf_lower = aucs_CI[:,2]
+	df = package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower)
+	df.to_hdf('test_auc.h5', 'table')
+	print(df)
+	print("--- %s seconds ---" % (time.time() - start_time))
 	
 if __name__ == '__main__':
-
-		log_df, unit_key_df = load_data()
-		trial_type = 'Stim_Som_NoCue'
-		comparison = 'Lick_no_lick'
-		unique_ids = unit_key_df['uni_id'].as_matrix()
-		unit_list = unit_row_list(log_df)
-		log_df = filt_motion_trials(log_df, 'trialsToExclude')
-		start_time = time.time()
-		with mp.Pool(7) as pool:
-			aucs_CI = pool.starmap(trial_auc, zip(unit_list, repeat(trial_type)))
-		#auc_CI = parmap.starmap(trial_auc, unit_list[0:5], trial_type)
-		#auc_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:5]))]
-		aucs_CI = np.squeeze(np.array(aucs_CI))
-		print(aucs_CI)
-
-		auc_scores = aucs_CI[:,0]
-		conf_upper = aucs_CI[:,1]
-		conf_lower = aucs_CI[:,2]
-		df = package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower)
-		df.to_hdf('test_auc.h5', 'table')
-		print(df)
-		print("--- %s seconds ---" % (time.time() - start_time))
+	main()
+		
