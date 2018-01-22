@@ -5,7 +5,7 @@ Eric Finkel
 """
 import time
 
- scipy as sp
+import scipy as sp
 import scipy.io
 import scipy.stats
 import os
@@ -22,6 +22,10 @@ import multiprocessing as mp
 from tqdm import tnrange
 from itertools import repeat
 from functools import partial
+import tqdm
+from tqdm import tnrange
+import parmap
+
 
 def load_data():
 	"""
@@ -74,16 +78,36 @@ def load_data():
 							 log_df['cluster_name'].apply(lambda x: x[2] + x[-2:]))
 	unit_key_df = log_df[['uni_id', 'mouse_name', 'date', 'cluster_name']].drop_duplicates().reset_index(drop = True)
 	return log_df, unit_key_df
+def filt_motion_trials(log_df, exclude_fn):
+	mat = sp.io.loadmat(exclude_fn)
+	log = mat['trialsToExclude']
+	indv_log_df = pd.DataFrame(log, columns = ['mouse_name', 'date', 'trial_num'])
 	
+	for col in [0,1,2,2]:
+		indv_log_df.ix[:,col] = indv_log_df.ix[:,col].str[0]
 	
-def trial_auc(log_df, trial_type, uni_id, comparison = 'Lick_no_lick'):
+	log_df.reset_index(inplace = True)
+	
+	rows_to_exclude = pd.merge(log_df, indv_log_df, how='inner')
+	inds_to_exclude = rows_to_exclude['index'].as_matrix()
+	log_df = log_df.drop(inds_to_exclude).reset_index(drop=True)
+	
+	return log_df
+
+def unit_row_list(log_df):
+	log_byID = log_df.groupby('uni_id')
+	unique_ids = log_byID.groups.keys()
+	log_unit_list = [log_byID.get_group(key) for key in unique_ids]
+	return log_unit_list
+	
+def trial_auc(unit_rows, trial_type,  comparison = 'Lick_no_lick'):
 	"""
 	function that calculates the binned auc values comparing two user defined trial types.
 	outputs three numpy array containing binned auc values, upper confidence interval, lower confidence interval
 	"""
 	
 	edges = np.arange(-1,3, 0.025)
-	unit_rows = log_df[log_df['uni_id'] == uni_id]
+	#unit_rows = log_df[log_df['uni_id'] == uni_id]
 	#unit_rows = pd.merge(log_df,pd.DataFrame(unit_key_df.loc[unit_num]).T, how = 'inner', on=['uni_id'])
 	
 
@@ -142,20 +166,14 @@ def trial_auc(log_df, trial_type, uni_id, comparison = 'Lick_no_lick'):
 
 			rng_seed = 42  # control reproducibility
 			rng = np.random.RandomState(rng_seed)
-
-			bootstrapped_scores = []
-			for boot_num in range(1000):
-				indices = rng.randint(0, len(y) - 1, len(y))
-				if len(np.unique(y[indices])) < 2:
-					# need at least one positive and one negative sample for ROC AUC
-					# to be defined: reject the sample
-					continue
-				bootstrapped_scores.append(roc_auc_score(y[indices],spike_counts_2d[indices, bin]))
+			indices = rng.randint(0, len(y) - 1, [1000, len(y)])
+			bootstrapped_scores = [roc_auc_score(y[indices[boot_num,:]], spike_counts_2d[indices[boot_num,:], bin]) 
+									for boot_num in range(1000) if len(np.unique(y[indices[boot_num,:]])) == 2]
 			sorted_scores = np.array(bootstrapped_scores)
 			sorted_scores.sort()
 			unit_conf_lower[0][bin] = sorted_scores[int(0.025 * len(sorted_scores))]
 			unit_conf_upper[0][bin] = sorted_scores[int(0.975 * len(sorted_scores))]
-	return uni_id, auc_scores, unit_conf_lower, unit_conf_upper
+	return auc_scores, unit_conf_lower, unit_conf_upper
 
 def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower):
 
@@ -181,15 +199,19 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
 	
 if __name__ == '__main__':
 
-		start_time = time.time()
 		log_df, unit_key_df = load_data()
 		trial_type = 'Stim_Som_NoCue'
 		comparison = 'Lick_no_lick'
 		unique_ids = unit_key_df['uni_id'].as_matrix()
-		with mp.Pool(2) as pool:
-			aucs_CI = pool.starmap(trial_auc, zip(repeat(log_df), repeat(trial_type), uni_id[0:2]))
-			
+		unit_list = unit_row_list(log_df)
+		log_df = filt_motion_trials(log_df, 'trialsToExclude')
+		start_time = time.time()
+		with mp.Pool(7) as pool:
+			aucs_CI = pool.starmap(trial_auc, zip(unit_list, repeat(trial_type)))
+		#auc_CI = parmap.starmap(trial_auc, unit_list[0:5], trial_type)
+		#auc_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:5]))]
 		aucs_CI = np.squeeze(np.array(aucs_CI))
+		print(aucs_CI)
 
 		auc_scores = aucs_CI[:,0]
 		conf_upper = aucs_CI[:,1]

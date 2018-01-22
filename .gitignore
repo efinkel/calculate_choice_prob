@@ -1,0 +1,6 @@
+trialsToExclude.mat
+*.h5
+*.mat
+Untitiled*
+*.ipynb
+*__pycache__
