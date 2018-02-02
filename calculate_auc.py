@@ -34,7 +34,7 @@ def load_data():
 	cat_session.mat function
 	"""
 	
-	log_df = pd.read_hdf('C:/Users/PC/Documents/GitHub/Jupyter-data-analysis/Data/log_df.h5', 'table')
+	log_df = pd.read_hdf('C:/Users/PC/Documents/GitHub/Crossmodal-project/Data/log_df.h5', 'table')
 	log_df['stim_onset'] = log_df['stim_onset'].fillna(0)
 	log_df['spike_times(stim_aligned)'] = log_df['spike_times'] - log_df['stim_onset']
 	log_df = log_df[~log_df['trial_type'].str.contains('NoStim')]
@@ -110,13 +110,7 @@ def unit_row_list(log_df):
 	log_unit_list = [log_byID.get_group(key) for key in unique_ids]
 	return log_unit_list
 	
-def trial_auc(unit_rows, trial_type,  comparison = 'Lick_no_lick'):
-	"""
-	function that calculates the binned auc values comparing two user defined trial types.
-	outputs three numpy array containing binned auc values, upper confidence interval, lower confidence interval
-	"""
-	
-	edges = np.arange(-1,3, 0.025)
+def get_spike_counts(unit_rows, trial_type, comparison):
 	
 	if comparison == 'Lick_no_lick':
 		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0),:].copy()
@@ -141,45 +135,54 @@ def trial_auc(unit_rows, trial_type,  comparison = 'Lick_no_lick'):
 		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
 	else:
 		raise ValueError("Invalid comparison passed. Pass either: 'touch_hit_miss', 'touch_hit_cr', 'touch_miss_cr', 'visual_hit_miss', 'visual_hit_cr', 'visual_hit_cr', 'visual_miss_cr'")
+	
+	if ~pos_rows.empty: pos_rows['labels'] = 1
+	if ~neg_rows.empty: neg_rows['labels'] = 0
+	
+	comparison_rows = pd.concat([pos_rows, neg_rows])
+	edges = np.arange(-1,3, 0.025)
 
-	if pos_rows.empty:
+	spike_counts_df = comparison_rows[['mouse_name', 'date', 'cluster_name',
+									   'trial_num', 'spike_times(stim_aligned)', 'labels']].copy().reset_index(drop=True)
+	spike_counts_df['spike_counts(stim_aligned)'] = spike_counts_df['spike_times(stim_aligned)'].apply(lambda y: np.histogram(y, edges)[0])
+	
+	y = spike_counts_df['labels'].as_matrix()
+	if spike_counts_df.shape[0] == 0:
+		spike_counts_2d = []
+	else:
+		spike_counts_2d = np.stack(spike_counts_df['spike_counts(stim_aligned)'].as_matrix())
+
+	return spike_counts_2d, y
+
+
+def trial_auc(binned_FR, y_values):
+	"""
+	function that calculates the binned auc values comparing two user defined trial types.
+	outputs three numpy array containing binned auc values, upper confidence interval, lower confidence interval
+	"""
+	
+	if len(np.unique(y_values)) < 2:
 		auc_scores = np.array([np.nan]*159)
 		unit_conf_upper = np.array([np.nan]*159)
 		unit_conf_lower = np.array([np.nan]*159)
 		return auc_scores, unit_conf_lower, unit_conf_upper
 
-	pos_rows['labels'] = 1
-	neg_rows['labels'] = 0
-
-	comparison_rows = pd.concat([pos_rows, neg_rows])
-	bin_means_all = []
-	spike_counts_df = comparison_rows[['mouse_name', 'date', 'cluster_name',
-									   'trial_num', 'spike_times(stim_aligned)', 'labels']].copy().reset_index(drop=True)
-	spike_counts_df['spike_counts(stim_aligned)'] = spike_counts_df['spike_times(stim_aligned)'].apply(lambda y: np.histogram(y, edges)[0])
-
-	y = spike_counts_df['labels'].as_matrix()
-	spike_counts_2d = np.stack(spike_counts_df['spike_counts(stim_aligned)'].as_matrix())
-
-	auc_scores = np.zeros([1,spike_counts_2d.shape[1]])
-	unit_conf_upper = np.zeros([1,spike_counts_2d.shape[1]])
-	unit_conf_lower = np.zeros([1,spike_counts_2d.shape[1]])
-	for bin in range(spike_counts_2d.shape[1]):
-		if len(np.unique(y)) < 2:
-			auc_scores[0][bin] = np.nan
-			unit_conf_lower[0][bin] =np.nan
-			unit_conf_upper[0][bin] = np.nan
-		else:
-			auc_scores[0][bin] = roc_auc_score(y,spike_counts_2d[:, bin])
-
-			rng_seed = 42  # control reproducibility
-			rng = np.random.RandomState(rng_seed)
-			indices = rng.randint(0, len(y) - 1, [1000, len(y)])
-			bootstrapped_scores = [roc_auc_score(y[indices[boot_num,:]], spike_counts_2d[indices[boot_num,:], bin]) 
-									for boot_num in range(1000) if len(np.unique(y[indices[boot_num,:]])) == 2]
-			sorted_scores = np.array(bootstrapped_scores)
-			sorted_scores.sort()
-			unit_conf_lower[0][bin] = sorted_scores[int(0.025 * len(sorted_scores))]
-			unit_conf_upper[0][bin] = sorted_scores[int(0.975 * len(sorted_scores))]
+	auc_scores = np.zeros([1,binned_FR.shape[1]])
+	unit_conf_upper = np.zeros([1,binned_FR.shape[1]])
+	unit_conf_lower = np.zeros([1,binned_FR.shape[1]])
+	for bin in range(binned_FR.shape[1]):
+		auc_scores[0][bin] = roc_auc_score(y_values,binned_FR[:, bin])
+		
+		rng_seed = 42  # control reproducibility
+		rng = np.random.RandomState(rng_seed)
+		indices = rng.randint(0, len(y_values) - 1, [1000, len(y_values)])
+		
+		bootstrapped_scores = [roc_auc_score(y_values[indices[boot_num,:]], binned_FR[indices[boot_num,:], bin]) for 
+								boot_num in range(1000) if len(np.unique(y_values[indices[boot_num,:]])) == 2]
+		sorted_scores = np.array(bootstrapped_scores)
+		sorted_scores.sort()
+		unit_conf_lower[0][bin] = sorted_scores[int(0.025 * len(sorted_scores))]
+		unit_conf_upper[0][bin] = sorted_scores[int(0.975 * len(sorted_scores))]
 	return auc_scores, unit_conf_lower, unit_conf_upper
 
 def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower):
@@ -203,8 +206,7 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
     auc_df = pd.concat([unit_key_df, auc_scores_df, conf_up_df, conf_low_df], axis = 1)
     return auc_df
 	
-def main(trial_type = 'Stim_Som_NoCue', comparison = 'Lick_no_lick'):
-	print('trialtype: Stim_Som_NoCue, comparison: Lick_no_lick')
+def main(trial_type = '1CycStim_Som_NoCue', comparison = 'Lick_no_lick'):
 
 	log_df, unit_key_df = load_data()
 	unique_ids = unit_key_df['uni_id'].as_matrix()
@@ -212,17 +214,20 @@ def main(trial_type = 'Stim_Som_NoCue', comparison = 'Lick_no_lick'):
 	log_df = filt_motion_trials(log_df, 'trialsToExclude')
 	start_time = time.time()
 	
+	binned_FRs, y_values = zip(*[get_spike_counts(unit_list[unit], trial_type, comparison) 
+								for unit in range(len(unit_list))])
+	
 	with mp.Pool(7) as pool:
-		aucs_CI = pool.starmap(trial_auc, zip(unit_list, repeat(trial_type)))
+		aucs_CI = pool.starmap(trial_auc, zip(binned_FRs, y_values))
 	#auc_CI = parmap.starmap(trial_auc, unit_list[0:5], trial_type)
-	#auc_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:5]))]
+	# aucs_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:5]))]
 	aucs_CI = np.squeeze(np.array(aucs_CI))
 
 	auc_scores = aucs_CI[:,0]
 	conf_upper = aucs_CI[:,1]
 	conf_lower = aucs_CI[:,2]
 	df = package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower)
-	df.to_hdf('test_auc.h5', 'table')
+	df.to_hdf('shortTouch_lick_no_lick_auc.h5', 'table')
 	print(df)
 	print("--- %s seconds ---" % (time.time() - start_time))
 	
