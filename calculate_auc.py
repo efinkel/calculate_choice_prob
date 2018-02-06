@@ -162,9 +162,9 @@ def trial_auc(binned_FR, y_values):
 	"""
 	
 	if len(np.unique(y_values)) < 2:
-		auc_scores = np.array([np.nan]*159)
-		unit_conf_upper = np.array([np.nan]*159)
-		unit_conf_lower = np.array([np.nan]*159)
+		auc_scores = np.array([np.nan]*159, ndmin=2)
+		unit_conf_upper = np.array([np.nan]*159, ndmin=2)
+		unit_conf_lower = np.array([np.nan]*159, ndmin=2)
 		return auc_scores, unit_conf_lower, unit_conf_upper
 
 	auc_scores = np.zeros([1,binned_FR.shape[1]])
@@ -194,9 +194,9 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
     unit_key_df['tt_comp'] = trial_type
     unit_key_df['comparison'] = comparison
 
-    auc_labels = ['auc_score'+str(x) for x in range(auc_scores.shape[1])]
-    conf_upper_labels = ['conf_upper'+str(x) for x in range(auc_scores.shape[1])]
-    conf_lower_labels = ['conf_lower'+str(x) for x in range(auc_scores.shape[1])]
+    auc_labels = ['auc_score'+str(x) for x in range(len(auc_scores[0]))]
+    conf_upper_labels = ['conf_upper'+str(x) for x in range(len(auc_scores[0]))]
+    conf_lower_labels = ['conf_lower'+str(x) for x in range(len(auc_scores[0]))]
 
     auc_scores_df = pd.DataFrame(auc_scores, columns = auc_labels)
     conf_up_df = pd.DataFrame(conf_upper, columns = conf_upper_labels)
@@ -206,7 +206,7 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
     auc_df = pd.concat([unit_key_df, auc_scores_df, conf_up_df, conf_low_df], axis = 1)
     return auc_df
 	
-def main(trial_type = '1CycStim_Som_NoCue', comparison = 'Lick_no_lick'):
+def main(trial_type = '1CycStim_Vis_NoCue', comparison = 'Lick_no_lick'):
 
 	log_df, unit_key_df = load_data()
 	unique_ids = unit_key_df['uni_id'].as_matrix()
@@ -220,14 +220,14 @@ def main(trial_type = '1CycStim_Som_NoCue', comparison = 'Lick_no_lick'):
 	with mp.Pool(7) as pool:
 		aucs_CI = pool.starmap(trial_auc, zip(binned_FRs, y_values))
 	#auc_CI = parmap.starmap(trial_auc, unit_list[0:5], trial_type)
-	# aucs_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:5]))]
+	# aucs_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:200]))]
 	aucs_CI = np.squeeze(np.array(aucs_CI))
 
 	auc_scores = aucs_CI[:,0]
 	conf_upper = aucs_CI[:,1]
 	conf_lower = aucs_CI[:,2]
 	df = package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower)
-	df.to_hdf('shortTouch_lick_no_lick_auc.h5', 'table')
+	df.to_hdf('shortVis_lick_no_lick_auc.h5', 'table')
 	print(df)
 	print("--- %s seconds ---" % (time.time() - start_time))
 	
