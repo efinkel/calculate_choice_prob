@@ -133,6 +133,12 @@ def get_spike_counts(unit_rows, trial_type, comparison):
 	elif comparison == 'visual_miss_cr':
 		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'):].copy()
 		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
+	elif comparison == 'lick_right':
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 1):].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0):].copy()
+	elif  comparison == 'lick_left':
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 2):].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0):].copy()
 	else:
 		raise ValueError("Invalid comparison passed. Pass either: 'touch_hit_miss', 'touch_hit_cr', 'touch_miss_cr', 'visual_hit_miss', 'visual_hit_cr', 'visual_hit_cr', 'visual_miss_cr'")
 	
@@ -206,7 +212,7 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
     auc_df = pd.concat([unit_key_df, auc_scores_df, conf_up_df, conf_low_df], axis = 1)
     return auc_df
 	
-def main(trial_type = '1CycStim_Vis_NoCue', comparison = 'Lick_no_lick'):
+def main(trial_type = 'Stim_Som_NoCue', comparison = 'lick_right'):
 
 	log_df, unit_key_df = load_data()
 	unique_ids = unit_key_df['uni_id'].as_matrix()
@@ -227,7 +233,7 @@ def main(trial_type = '1CycStim_Vis_NoCue', comparison = 'Lick_no_lick'):
 	conf_upper = aucs_CI[:,1]
 	conf_lower = aucs_CI[:,2]
 	df = package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower)
-	df.to_hdf('shortVis_lick_no_lick_auc.h5', 'table')
+	df.to_hdf('touch_lick_right_auc.h5', 'table')
 	print(df)
 	print("--- %s seconds ---" % (time.time() - start_time))
 	
