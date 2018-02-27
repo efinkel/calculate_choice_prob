@@ -1,10 +1,11 @@
+
 """
 module containing functions for calculating the choice probability of recorded neurons
 1/19/2018
 Eric Finkel
 """
 import time
-
+import math
 import scipy as sp
 import scipy.io
 import scipy.stats
@@ -34,7 +35,7 @@ def load_data():
 	cat_session.mat function
 	"""
 	
-	log_df = pd.read_hdf('C:/Users/PC/Documents/GitHub/Crossmodal-project/Data/log_df.h5', 'table')
+	log_df = pd.read_hdf('/home/paperspace/calculate_choice_prob/log_df.h5', 'table')
 	log_df['stim_onset'] = log_df['stim_onset'].fillna(0)
 	log_df['spike_times(stim_aligned)'] = log_df['spike_times'] - log_df['stim_onset']
 	log_df = log_df[~log_df['trial_type'].str.contains('NoStim')]
@@ -116,29 +117,29 @@ def get_spike_counts(unit_rows, trial_type, comparison):
 		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0),:].copy()
 		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0),:].copy()
 	elif comparison == 'touch_hit_miss':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Whisker'),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'),:].copy()
 	elif comparison == 'touch_hit_cr':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'):].copy()
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Whisker'),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'),:].copy()
 	elif comparison == 'touch_miss_cr':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'):].copy()
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'),:].copy()
 	elif comparison == 'visual_hit_miss':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Visual'):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'):].copy()
-	elif 'visual_hit_cr':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Visual'):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Visual'),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'),:].copy()
+	elif comparison == 'visual_hit_cr':
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] != 0) & (unit_rows['block_type'] == 'Visual'),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'),:].copy()
 	elif comparison == 'visual_miss_cr':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'):].copy()
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Visual'),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0) & (unit_rows['block_type'] == 'Whisker'),:].copy()
 	elif comparison == 'lick_right':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 1):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0):].copy()
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 1),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0),:].copy()
 	elif  comparison == 'lick_left':
-		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 2):].copy()
-		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0):].copy()
+		pos_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 2),:].copy()
+		neg_rows = unit_rows.loc[(unit_rows['trial_type'] == trial_type) & (unit_rows['response'] == 0),:].copy()
 	else:
 		raise ValueError("Invalid comparison passed. Pass either: 'touch_hit_miss', 'touch_hit_cr', 'touch_miss_cr', 'visual_hit_miss', 'visual_hit_cr', 'visual_hit_cr', 'visual_miss_cr'")
 	
@@ -181,7 +182,7 @@ def trial_auc(binned_FR, y_values):
 		
 		rng_seed = 42  # control reproducibility
 		rng = np.random.RandomState(rng_seed)
-		indices = rng.randint(0, len(y_values) - 1, [1000, len(y_values)])
+		indices = rng.randint(0, len(y_values), [1000, len(y_values)])
 		
 		bootstrapped_scores = [roc_auc_score(y_values[indices[boot_num,:]], binned_FR[indices[boot_num,:], bin]) for 
 								boot_num in range(1000) if len(np.unique(y_values[indices[boot_num,:]])) == 2]
@@ -197,6 +198,7 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
     function that turns auc scores and confidence interval arrrays into a data frame containing metadata
     describing the details of the auc calculation
     """
+    unit_key_df = unit_key_df.reset_index(drop=True)
     unit_key_df['tt_comp'] = trial_type
     unit_key_df['comparison'] = comparison
 
@@ -212,31 +214,35 @@ def package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, con
     auc_df = pd.concat([unit_key_df, auc_scores_df, conf_up_df, conf_low_df], axis = 1)
     return auc_df
 	
-def main(trial_type = 'Stim_Som_NoCue', comparison = 'lick_right'):
+def main(trial_type = 'Stim_Vis_NoCue', comparison = 'visual_hit_miss'):
 
 	log_df, unit_key_df = load_data()
 	unique_ids = unit_key_df['uni_id'].as_matrix()
+	log_df = filt_motion_trials(log_df, 'trialsToExclude3')
 	unit_list = unit_row_list(log_df)
-	log_df = filt_motion_trials(log_df, 'trialsToExclude')
 	start_time = time.time()
 	
 	binned_FRs, y_values = zip(*[get_spike_counts(unit_list[unit], trial_type, comparison) 
 								for unit in range(len(unit_list))])
 	
-	with mp.Pool(7) as pool:
-		aucs_CI = pool.starmap(trial_auc, zip(binned_FRs, y_values))
-	#auc_CI = parmap.starmap(trial_auc, unit_list[0:5], trial_type)
-	# aucs_CI = [trial_auc(unit_list[unit], trial_type) for unit in range(len(unit_list[0:200]))]
-	aucs_CI = np.squeeze(np.array(aucs_CI))
-
-	auc_scores = aucs_CI[:,0]
-	conf_upper = aucs_CI[:,1]
-	conf_lower = aucs_CI[:,2]
-	df = package_auc(unit_key_df, trial_type, comparison, auc_scores, conf_upper, conf_lower)
-	df.to_hdf('touch_lick_right_auc.h5', 'table')
-	print(df)
-	print("--- %s seconds ---" % (time.time() - start_time))
+	with mp.Pool(23) as pool:
+		x = 1975
+		for i in range(12,13): #int(math.ceil(len(y_values)/200))):
+			if  x+100 < len(y_values): a = x+100
+			else: a = len(y_values)
+			aucs_CI = pool.starmap(trial_auc, zip(binned_FRs[x:a], y_values[x:a]))
+				
+			aucs_CI = np.squeeze(np.array(aucs_CI))
+			auc_scores = aucs_CI[:,0]
+			conf_upper = aucs_CI[:,1]
+			conf_lower = aucs_CI[:,2]
+			df = package_auc(unit_key_df.loc[x:a-1,:], trial_type, comparison, auc_scores, conf_upper, conf_lower)
+			df.to_hdf('visual_hit_miss_auc'+str(i)+ '.h5', 'table')
+			print(df)
+			x = x+100
+		print("--- %s seconds ---" % (time.time() - start_time))
 	
 if __name__ == '__main__':
 	main()
 		
+

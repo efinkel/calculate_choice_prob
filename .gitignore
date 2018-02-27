@@ -4,3 +4,4 @@ trialsToExclude.mat
 Untitiled*
 *.ipynb
 *__pycache__
+*.zip
